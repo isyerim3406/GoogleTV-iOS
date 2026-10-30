@@ -124,6 +124,7 @@ final class ADBClient {
     private var conn: NWConnection?
     private let auth: TVKey
     private var nextID: UInt32 = 1
+    private var maxPacket: Int = 4096
 
     init() throws { auth = try TVKey() }
 
@@ -188,7 +189,7 @@ final class ADBClient {
         var authorizations = 0
         while authorizations < 6 {
             let packet = try receive()
-            if packet.command == CNXN { return }
+            if packet.command == CNXN { maxPacket = max(1024, min(Int(packet.arg1), 262144)); return }
             if packet.command == AUTH && packet.arg0 == 1 {
                 authorizations += 1
                 if authorizations == 1 {
@@ -200,6 +201,61 @@ final class ADBClient {
         }
         throw TVError.protocolError
     }
+    // ADB sync protocol: upload local file to the TV without an Android phone.
+    private func syncWrite(_ id: UInt32, _ remote: UInt32, _ data: [UInt8]) throws {
+        var offset = 0
+        while offset < data.count {
+            let count = min(maxPacket, data.count - offset)
+            write(WRTE, id, remote, Array(data[offset..<(offset + count)]))
+            let ack = try receive(30)
+            guard ack.command == OKAY && ack.arg1 == id else { throw TVError.protocolError }
+            offset += count
+        }
+    }
+    private func syncFrame(_ name: String, _ payload: [UInt8]) -> [UInt8] {
+        Array(name.utf8) + le(UInt32(payload.count)) + payload
+    }
+    func pushFile(_ url: URL, remotePath: String) throws -> Int64 {
+        guard remotePath.hasPrefix("/data/local/tmp/"),
+              remotePath.range(of: "^/data/local/tmp/[A-Za-z0-9_.-]+$", options: .regularExpression) != nil else {
+            throw TVError.protocolError
+        }
+        let file = try FileHandle(forReadingFrom: url)
+        defer { try? file.close() }
+        let id = nextID; nextID += 1
+        write(OPEN, id, 0, Array("sync:\0".utf8))
+        let start = try receive()
+        guard start.command == OKAY && start.arg1 == id else { throw TVError.protocolError }
+        let remote = start.arg0
+        try syncWrite(id, remote, syncFrame("SEND", Array((remotePath + ",33206").utf8)))
+        var total: Int64 = 0
+        while true {
+            let chunk = try file.read(upToCount: 32768) ?? Data()
+            if chunk.isEmpty { break }
+            try syncWrite(id, remote, syncFrame("DATA", Array(chunk)))
+            total += Int64(chunk.count)
+        }
+        // DONE carries the modification timestamp, rather than a payload length.
+        let done = Array("DONE".utf8) + le(UInt32(Date().timeIntervalSince1970))
+        try syncWrite(id, remote, done)
+        var response = [UInt8]()
+        while response.count < 8 {
+            let p = try receive(60)
+            if p.command == WRTE && p.arg1 == id {
+                response += p.bytes
+                write(OKAY, id, p.arg0)
+            } else if p.command == CLSE { throw TVError.protocolError }
+        }
+        let code = String(decoding: response.prefix(4), as: UTF8.self)
+        if code != "OKAY" {
+            throw NSError(domain: "ADB Sync", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Dosya aktarımı başarısız: " + String(decoding: response, as: UTF8.self)
+            ])
+        }
+        write(CLSE, id, remote)
+        return total
+    }
+
     func shell(_ command: String) throws -> String {
         let id = nextID; nextID += 1
         write(OPEN, id, 0, Array("shell:\(command)\0".utf8))

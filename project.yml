@@ -1,0 +1,25 @@
+name: GoogleTVTools
+options:
+  deploymentTarget:
+    iOS: "16.0"
+packages:
+  BigInt:
+    url: https://github.com/attaswift/BigInt.git
+    from: 5.3.0
+targets:
+  GoogleTVTools:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    dependencies:
+      - package: BigInt
+    settings:
+      base:
+        SWIFT_VERSION: "5.9"
+        PRODUCT_BUNDLE_IDENTIFIER: com.isyerim3406.googletvtools
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Google TV'ye yerel agdan baglanmak icin izin gerekli."
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGNING_ALLOWED: NO

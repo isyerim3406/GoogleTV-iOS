@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main
 struct GoogleTVToolsApp: App {
@@ -17,6 +18,15 @@ struct ContentView: View {
     @State private var query = ""
     @State private var showSystem = false
     @State private var deviceName = ""
+    @State private var apkPicker = false
+    @State private var installStatus = ""
+    @State private var terminalCommand = ""
+    @State private var selectedPackage = ""
+    @State private var permission = ""
+    @State private var allowPermission = true
+    @State private var pendingCommand = ""
+    @State private var pendingTitle = ""
+    @State private var showConfirmation = false
 
     private var visiblePackages: [String] {
         packages.filter {
@@ -49,6 +59,17 @@ struct ContentView: View {
                         HStack { key("Geri", 4); key("Ana ekran", 3); key("Menü", 82) }
                         HStack { key("Ses −", 25); key("Sessiz", 164); key("Ses +", 24) }
                     }
+                    Section("APK yükleme") {
+                        Button("iPhone'dan APK seç ve yükle") { apkPicker = true }
+                        Text(installStatus).font(.caption)
+                    }
+                    Section("TV ayarlarını aç") {
+                        Button("Genel ayarlar") { run("am start -a android.settings.SETTINGS") }
+                        Button("Wi-Fi") { run("am start -a android.settings.WIFI_SETTINGS") }
+                        Button("Uygulama ayarları") { run("am start -a android.settings.MANAGE_APPLICATIONS_SETTINGS") }
+                        Button("Geliştirici ayarları") { run("am start -a android.settings.APPLICATION_DEVELOPMENT_SETTINGS") }
+                        Button("Erişilebilirlik") { run("am start -a android.settings.ACCESSIBILITY_SETTINGS") }
+                    }
                     Section("Uygulamalar") {
                         Button("Yüklü uygulamaları listele") { run("pm list packages", list: true) }
                         Toggle("Sistem paketlerini göster", isOn: $showSystem)
@@ -64,7 +85,39 @@ struct ContentView: View {
                                     Button("Devre dışı") { run("pm disable-user --user 0 \(package)") }
                                     Button("Etkinleştir") { run("pm enable \(package)") }
                                 }.buttonStyle(.bordered).font(.caption)
+                                HStack {
+                                    Button("Ayarlar") { run("am start -a android.settings.APPLICATION_DETAILS_SETTINGS -d package:\(package)") }
+                                    Button("Durdur") { run("am force-stop \(package)") }
+                                    Button("İzinler") {
+                                        selectedPackage = package
+                                        run("dumpsys package \(package)")
+                                    }
+                                }.buttonStyle(.bordered).font(.caption)
+                                HStack {
+                                    Button("Verileri sil", role: .destructive) {
+                                        ask("Veriler silinsin mi?", "pm clear \(package)")
+                                    }
+                                    Button("Kaldır", role: .destructive) {
+                                        ask("Uygulama kaldırılsın mı?", "pm uninstall --user 0 \(package)")
+                                    }
+                                }.buttonStyle(.bordered).font(.caption)
                             }
+                        }
+                    }
+                    Section("Uygulama izinleri") {
+                        TextField("Paket", text: $selectedPackage).textInputAutocapitalization(.never)
+                        TextField("Örn. android.permission.CAMERA", text: $permission).textInputAutocapitalization(.never)
+                        Toggle("İzni ver", isOn: $allowPermission)
+                        Button("İzni uygula") {
+                            if safeName(selectedPackage) && safeName(permission) {
+                                ask("İzin değiştirilsin mi?", "pm \(allowPermission ? "grant" : "revoke") \(selectedPackage) \(permission)")
+                            } else { output = "Geçersiz paket veya izin adı." }
+                        }
+                    }
+                    Section("ADB terminal") {
+                        TextField("ADB shell komutu", text: $terminalCommand)
+                        Button("Komutu gönder") {
+                            if !terminalCommand.isEmpty { ask("Komut çalıştırılsın mı?", terminalCommand) }
                         }
                     }
                     Section("Cihaz bilgileri") {
@@ -84,11 +137,58 @@ struct ContentView: View {
                 }.font(.footnote)
             }
             .navigationTitle("Google TV Tools")
+            .fileImporter(isPresented: $apkPicker, allowedContentTypes: [UTType(filenameExtension: "apk") ?? .data]) { result in
+                switch result {
+                case .success(let url): installAPK(url)
+                case .failure(let error): output = error.localizedDescription
+                }
+            }
+            .alert(pendingTitle, isPresented: $showConfirmation) {
+                Button("Onayla", role: .destructive) { run(pendingCommand) }
+                Button("İptal", role: .cancel) {}
+            } message: { Text(pendingCommand) }
             .overlay {
                 if busy {
                     ProgressView("İşleniyor…")
                         .padding(24).background(.regularMaterial)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+            }
+        }
+    }
+    private func safeName(_ value: String) -> Bool {
+        value.range(of: "^[A-Za-z0-9_.]+$", options: .regularExpression) != nil &&
+        value.contains(".")
+    }
+    private func ask(_ title: String, _ command: String) {
+        pendingTitle = title
+        pendingCommand = command
+        showConfirmation = true
+    }
+    private func installAPK(_ url: URL) {
+        guard let c = client else { return }
+        busy = true
+        installStatus = "Aktarılıyor…"
+        DispatchQueue.global(qos: .userInitiated).async {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let path = "/data/local/tmp/" + UUID().uuidString + ".apk"
+            do {
+                let count = try c.pushFile(url, remotePath: path)
+                DispatchQueue.main.async { installStatus = "\(count) bayt aktarıldı, kuruluyor…" }
+                let result = try c.shell("pm install -r " + path)
+                _ = try? c.shell("rm -f " + path)
+                DispatchQueue.main.async {
+                    output = result
+                    installStatus = result.contains("Success") ? "Kurulum başarılı" : "Kurulum sonucunu kontrol edin"
+                    busy = false
+                }
+            } catch {
+                _ = try? c.shell("rm -f " + path)
+                DispatchQueue.main.async {
+                    output = error.localizedDescription
+                    installStatus = "APK yüklenemedi"
+                    busy = false
                 }
             }
         }

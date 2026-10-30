@@ -10,6 +10,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install XcodeGen
         run: brew install xcodegen
+      - name: Verify application entry point
+        run: |
+          test -f Sources/GoogleTVToolsApp.swift
+          grep -q '@main' Sources/GoogleTVToolsApp.swift
+          ls -la Sources
       - name: Generate project
         run: xcodegen generate
       - name: Build for iPhone

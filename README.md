@@ -22,3 +22,13 @@ Workflow macOS, XcodeGen, Xcode ve Swift Package Manager kullanarak iphoneos ici
 
 ## Lisans
 Bu bagimsiz proje GPL-3.0-or-later kosullariyla paylasilir. Kaynak kod orijinal Tellyscope'tan kopyalanmamistir.
+
+## Yeni uygulama yönetimi (deneysel)
+- Dosyalar uygulamasindan APK secimi ve ADB sync ile /data/local/tmp uzerinden yukleme
+- pm install -r ile kurulum; aktarim sonrasi gecici APK silme
+- Uygulama kaldirma (kullanici 0), durdurma, veri silme ve uygulama ayarlari
+- Android runtime izinlerini pm grant / pm revoke ile degistirme (izin uygunsa)
+- TV'de sistem, Wi-Fi, uygulama, gelistirici ve erisilebilirlik ayar sayfalarini acma
+- Elle ADB shell komutu gonderme
+
+Bu islemler yalnizca TV'ye yetkili klasik ADB baglantisi kurulduktan sonra calisir. Android 11+ 6 haneli TLS pairing protokolu **henuz uygulanmadi**. Bir uygulamanin ayarlar sayfasini acmak, ayarlari iPhone'da dogrudan degistirmek anlamina gelmez. Yaptiginiz degisiklikler kendi sorumlulugunuzdadir. Dosya aktarimi ve tum komutlar gercek TV'de henuz dogrulanmadi.

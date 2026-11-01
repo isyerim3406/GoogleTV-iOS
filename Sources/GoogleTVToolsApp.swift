@@ -56,8 +56,9 @@ struct ContentView: View {
                     Section("Cihaz bilgileri") {
                         Button("Depolama") { run("df -h /data") }
                         Button("Android sürümü") { run("getprop ro.build.version.release") }
-                        Button("TV'yi yeniden başlat") { run("reboot") }
+                        Button("TV'yi yeniden başlat") { ask("TV yeniden başlatılsın mı?", "reboot") }
                     }
+                }
                     if !output.isEmpty {
                         Section("Son işlem") { Text(output).font(.caption.monospaced()).textSelection(.enabled) }
                     }

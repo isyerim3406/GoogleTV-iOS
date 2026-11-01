@@ -35,8 +35,9 @@ struct ContentView: View {
         }
     }
     var body: some View {
-        NavigationStack {
-            Form {
+        TabView {
+            NavigationStack {
+                Form {
                 Section("Google TV bağlantısı") {
                     TextField("IP adresi", text: $address)
                         .textInputAutocapitalization(.never)
@@ -52,6 +53,24 @@ struct ContentView: View {
                     if !deviceName.isEmpty { Text(deviceName).font(.footnote) }
                 }
                 if connected {
+                    Section("Cihaz bilgileri") {
+                        Button("Depolama") { run("df -h /data") }
+                        Button("Android sürümü") { run("getprop ro.build.version.release") }
+                        Button("TV'yi yeniden başlat") { run("reboot") }
+                    }
+                    if !output.isEmpty {
+                        Section("Son işlem") { Text(output).font(.caption.monospaced()).textSelection(.enabled) }
+                    }
+                }
+                .scrollContentBackground(.hidden)
+                .background(Color(.systemGroupedBackground))
+                .navigationTitle("Bağlantı")
+            }
+            .tabItem { Label("Bağlantı", systemImage: "wifi") }
+
+            NavigationStack {
+                Form {
+                    if connected {
                     Section("Kumanda") {
                         HStack { Spacer(); key("↑", 19); Spacer() }
                         HStack { Spacer(); key("←", 21); key("OK", 23); key("→", 22); Spacer() }
@@ -59,17 +78,21 @@ struct ContentView: View {
                         HStack { key("Geri", 4); key("Ana ekran", 3); key("Menü", 82) }
                         HStack { key("Ses −", 25); key("Sessiz", 164); key("Ses +", 24) }
                     }
-                    Section("APK yükleme") {
-                        Button("iPhone'dan APK seç ve yükle") { apkPicker = true }
-                        Text(installStatus).font(.caption)
+                    } else { Text("Önce TV'ye bağlanın.").foregroundStyle(.secondary) }
+
+                    if !output.isEmpty {
+                        Section("Son işlem") { Text(output).font(.caption.monospaced()).textSelection(.enabled) }
                     }
-                    Section("TV ayarlarını aç") {
-                        Button("Genel ayarlar") { run("am start -a android.settings.SETTINGS") }
-                        Button("Wi-Fi") { run("am start -a android.settings.WIFI_SETTINGS") }
-                        Button("Uygulama ayarları") { run("am start -a android.settings.MANAGE_APPLICATIONS_SETTINGS") }
-                        Button("Geliştirici ayarları") { run("am start -a android.settings.APPLICATION_DEVELOPMENT_SETTINGS") }
-                        Button("Erişilebilirlik") { run("am start -a android.settings.ACCESSIBILITY_SETTINGS") }
-                    }
+                }
+                .scrollContentBackground(.hidden)
+                .background(Color(.systemGroupedBackground))
+                .navigationTitle("Kumanda")
+            }
+            .tabItem { Label("Kumanda", systemImage: "remote.fill") }
+
+            NavigationStack {
+                Form {
+                    if connected {
                     Section("Uygulamalar") {
                         Button("Yüklü uygulamaları listele") { run("pm list packages", list: true) }
                         Toggle("Sistem paketlerini göster", isOn: $showSystem)
@@ -104,6 +127,32 @@ struct ContentView: View {
                             }
                         }
                     }
+                    } else { Text("Önce TV'ye bağlanın.").foregroundStyle(.secondary) }
+
+                    if !output.isEmpty {
+                        Section("Son işlem") { Text(output).font(.caption.monospaced()).textSelection(.enabled) }
+                    }
+                }
+                .scrollContentBackground(.hidden)
+                .background(Color(.systemGroupedBackground))
+                .navigationTitle("Uygulamalar")
+            }
+            .tabItem { Label("Uygulamalar", systemImage: "square.grid.2x2.fill") }
+
+            NavigationStack {
+                Form {
+                    if connected {
+                    Section("APK yükleme") {
+                        Button("iPhone'dan APK seç ve yükle") { apkPicker = true }
+                        Text(installStatus).font(.caption)
+                    }
+                    Section("TV ayarlarını aç") {
+                        Button("Genel ayarlar") { run("am start -a android.settings.SETTINGS") }
+                        Button("Wi-Fi") { run("am start -a android.settings.WIFI_SETTINGS") }
+                        Button("Uygulama ayarları") { run("am start -a android.settings.MANAGE_APPLICATIONS_SETTINGS") }
+                        Button("Geliştirici ayarları") { run("am start -a android.settings.APPLICATION_DEVELOPMENT_SETTINGS") }
+                        Button("Erişilebilirlik") { run("am start -a android.settings.ACCESSIBILITY_SETTINGS") }
+                    }
                     Section("Uygulama izinleri") {
                         TextField("Paket", text: $selectedPackage).textInputAutocapitalization(.never)
                         TextField("Örn. android.permission.CAMERA", text: $permission).textInputAutocapitalization(.never)
@@ -120,39 +169,34 @@ struct ContentView: View {
                             if !terminalCommand.isEmpty { ask("Komut çalıştırılsın mı?", terminalCommand) }
                         }
                     }
-                    Section("Cihaz bilgileri") {
-                        Button("Depolama") { run("df -h /data") }
-                        Button("Android sürümü") { run("getprop ro.build.version.release") }
-                        Button("TV'yi yeniden başlat") { run("reboot") }
+                    } else { Text("Önce TV'ye bağlanın.").foregroundStyle(.secondary) }
+
+                    if !output.isEmpty {
+                        Section("Son işlem") { Text(output).font(.caption.monospaced()).textSelection(.enabled) }
                     }
                 }
-                if !output.isEmpty {
-                    Section("Komut çıktısı") {
-                        Text(output).font(.caption.monospaced()).textSelection(.enabled)
-                    }
-                }
-                Section("Önemli") {
-                    Text("Bu sürüm yalnızca klasik ADB TCP (genellikle 5555 portu) ile çalışır. Google TV'nin 6 haneli Kablosuz Hata Ayıklama eşleştirmesi henüz desteklenmez.")
-                    Text("Sistem uygulamalarını devre dışı bırakmak televizyonun çalışmasını bozabilir.")
-                }.font(.footnote)
+                .scrollContentBackground(.hidden)
+                .background(Color(.systemGroupedBackground))
+                .navigationTitle("Araçlar")
             }
-            .navigationTitle("Google TV Tools")
-            .fileImporter(isPresented: $apkPicker, allowedContentTypes: [UTType(filenameExtension: "apk") ?? .data]) { result in
-                switch result {
-                case .success(let url): installAPK(url)
-                case .failure(let error): output = error.localizedDescription
-                }
+            .tabItem { Label("Araçlar", systemImage: "wrench.and.screwdriver.fill") }
+
+        }
+        .tint(.indigo)
+        .fileImporter(isPresented: $apkPicker, allowedContentTypes: [UTType(filenameExtension: "apk") ?? .data]) { result in
+            switch result {
+            case .success(let url): installAPK(url)
+            case .failure(let error): output = error.localizedDescription
             }
-            .alert(pendingTitle, isPresented: $showConfirmation) {
-                Button("Onayla", role: .destructive) { run(pendingCommand) }
-                Button("İptal", role: .cancel) {}
-            } message: { Text(pendingCommand) }
-            .overlay {
-                if busy {
-                    ProgressView("İşleniyor…")
-                        .padding(24).background(.regularMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
+        }
+        .alert(pendingTitle, isPresented: $showConfirmation) {
+            Button("Onayla", role: .destructive) { run(pendingCommand) }
+            Button("İptal", role: .cancel) {}
+        } message: { Text(pendingCommand) }
+        .overlay {
+            if busy {
+                ProgressView("İşleniyor…").padding(24).background(.regularMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
             }
         }
     }
